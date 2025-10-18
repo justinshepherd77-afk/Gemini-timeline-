@@ -2,18 +2,26 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { Context } from "@netlify/functions";
 
-// This is the single, secure entry point for all Gemini API calls.
-// The API key is stored securely in Netlify's environment variables.
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export default async (req: Request, context: Context) => {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
+
+  // The API key is stored securely in Netlify's environment variables.
+  // We check for it inside the handler to ensure the function can load
+  // and provide a graceful error if the key is missing.
+  if (!process.env.API_KEY) {
+    console.error("API_KEY environment variable is not set");
+    return new Response(
+        JSON.stringify({ error: 'Server configuration error: The API_KEY is not set.' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+    );
+  }
+  
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
     const { task, payload } = await req.json();
