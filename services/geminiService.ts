@@ -21,22 +21,21 @@ async function callNetlifyFunction(task: string, payload: any) {
   return response.json();
 }
 
-
-export async function getCitiesForCountry(country: string): Promise<string[]> {
-  const prompt = `Provide a JSON array of 20 major cities for the country: ${country}. Just the array.`;
-  const config = {
-      responseMimeType: "application/json",
-      responseSchema: { type: "ARRAY", items: { type: "STRING" } },
-  };
-
-  try {
-    const data = await callNetlifyFunction('getCitiesForCountry', { prompt, config });
-    return JSON.parse(data.text.trim()).sort();
-  } catch (e) {
-    console.error(`Failed to fetch cities for ${country}:`, e);
-    return ["Capital City"];
-  }
+// A new robust helper to handle API calls that expect a JSON response.
+// This prevents hangs by ensuring any parsing errors are caught and thrown properly.
+async function callAndParseJson<T>(task: string, payload: any): Promise<T> {
+    const data = await callNetlifyFunction(task, payload);
+    try {
+        if (typeof data?.text !== 'string' || !data.text.trim()) {
+            throw new Error("API returned no content or invalid content type.");
+        }
+        return JSON.parse(data.text.trim()) as T;
+    } catch (error) {
+        console.error(`Failed to parse JSON for task "${task}":`, data?.text, error);
+        throw new Error("The AI returned data in an unexpected format. Please try your query again.");
+    }
 }
+
 
 export async function generateImage(query: Query | { searchTerm: string }): Promise<string> {
   const prompt = 'year' in query 
@@ -55,8 +54,7 @@ export async function getSummaries(query: Query): Promise<SummaryResult> {
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { primary: { type: "STRING" }, related: { type: "STRING" } }, required: ["primary", "related"] },
   };
-  const data = await callNetlifyFunction('getSummaries', { prompt, config });
-  return JSON.parse(data.text.trim());
+  return callAndParseJson<SummaryResult>('getSummaries', { prompt, config });
 }
 
 export async function getInDepthReport(query: Query): Promise<EventInDepth> {
@@ -66,8 +64,7 @@ export async function getInDepthReport(query: Query): Promise<EventInDepth> {
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { keyFigures: { type: "STRING" }, socioPoliticalContext: { type: "STRING" }, opposingViews: { type: "STRING" }, immediateConsequences: { type: "STRING" } }, required: ["keyFigures", "socioPoliticalContext", "opposingViews", "immediateConsequences"] },
   };
-  const data = await callNetlifyFunction('getInDepthReport', { prompt, config });
-  return JSON.parse(data.text.trim());
+  return callAndParseJson<EventInDepth>('getInDepthReport', { prompt, config });
 }
 
 export async function getTimeline(query: Query): Promise<TimelineEvent[]> {
@@ -77,8 +74,7 @@ export async function getTimeline(query: Query): Promise<TimelineEvent[]> {
         responseMimeType: "application/json",
         responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { year: { type: "STRING" }, event: { type: "STRING" }, type: { type: "STRING", enum: ["preceding", "main", "succeeding"] }, interestingDetail: { type: "STRING" } }, required: ["year", "event", "type"] } },
     };
-    const data = await callNetlifyFunction('getTimeline', { prompt, config });
-    return JSON.parse(data.text.trim());
+    return callAndParseJson<TimelineEvent[]>('getTimeline', { prompt, config });
 }
 
 export async function classifySearchTerm(term: string): Promise<'person' | 'topic'> {
@@ -100,8 +96,7 @@ export async function getPersonSummary(term: string): Promise<PersonSummary> {
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { overview: { type: "STRING" }, family: { type: "STRING" }, keyEvents: { type: "STRING" } }, required: ["overview", "family", "keyEvents"] },
     };
-    const data = await callNetlifyFunction('getPersonSummary', { prompt, config });
-    return JSON.parse(data.text.trim());
+    return callAndParseJson<PersonSummary>('getPersonSummary', { prompt, config });
 }
 
 export async function getPersonInDepth(term: string): Promise<PersonInDepth> {
@@ -110,8 +105,7 @@ export async function getPersonInDepth(term: string): Promise<PersonInDepth> {
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { friendsAndAssociates: { type: "STRING" }, influencesAndMentors: { type: "STRING" }, achievements: { type: "STRING" }, funnyAnecdotes: { type: "STRING" }, embarrassingStories: { type: "STRING" }, conspiracyTheories: { type: "STRING" }, enemies: { type: "STRING" }, notableQuotes: { type: "STRING" }, contextualAnalysis: { type: "STRING" } }, required: ["friendsAndAssociates", "influencesAndMentors", "achievements", "funnyAnecdotes", "embarrassingStories", "conspiracyTheories", "enemies", "notableQuotes", "contextualAnalysis"] },
     };
-    const data = await callNetlifyFunction('getPersonInDepth', { prompt, config });
-    return JSON.parse(data.text.trim());
+    return callAndParseJson<PersonInDepth>('getPersonInDepth', { prompt, config });
 }
 
 export async function getSixDegreesOfSeparation(term: string): Promise<HistoricalEchoLink[]> {
@@ -120,8 +114,7 @@ export async function getSixDegreesOfSeparation(term: string): Promise<Historica
         responseMimeType: "application/json",
         responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { year: { type: "STRING" }, title: { type: "STRING" }, consequence: { type: "STRING" } }, required: ["year", "title", "consequence"] } },
     };
-    const data = await callNetlifyFunction('getSixDegreesOfSeparation', { prompt, config });
-    return JSON.parse(data.text.trim());
+    return callAndParseJson<HistoricalEchoLink[]>('getSixDegreesOfSeparation', { prompt, config });
 }
 
 export async function getFamilyTree(term: string): Promise<FamilyTreeNode> {
@@ -154,6 +147,5 @@ export async function getFamilyTree(term: string): Promise<FamilyTreeNode> {
     
     const prompt = `Generate a family tree for "${term}". The structure must be a nested JSON object. The root object represents "${term}" and should have the relation "Self". Each object must have "name", "relation", and an optional "children" array of similar objects. CRITICAL: To prevent a stack overflow error, the nesting depth of the tree MUST be strictly limited. Include only immediate parents, spouse(s), and children. You may include grandparents and grandchildren, but go no further than one generation up from parents and one generation down from children.`;
     const config = { responseMimeType: "application/json", responseSchema: familyTreeNodeSchema };
-    const data = await callNetlifyFunction('getFamilyTree', { prompt, config });
-    return JSON.parse(data.text.trim());
+    return callAndParseJson<FamilyTreeNode>('getFamilyTree', { prompt, config });
 }

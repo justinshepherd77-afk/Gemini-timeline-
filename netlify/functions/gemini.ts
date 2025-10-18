@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { Context } from "@netlify/functions";
 
@@ -62,7 +63,7 @@ export default async (req: Request, context: Context) => {
       default:
         response = await ai.models.generateContent({
             model: model,
-            contents: payload.prompt,
+            contents: [{ parts: [{ text: payload.prompt }] }], // Use structured content for robustness
             config: payload.config,
         });
 
@@ -76,13 +77,11 @@ export default async (req: Request, context: Context) => {
             throw new Error(errorMessage);
         }
 
-        // Add more robust check for empty content to prevent crashes.
-        const candidate = response.candidates[0];
-        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-          throw new Error("The API returned a response, but it contained no content.");
-        }
+        // The .text accessor is the recommended and safest way to get text content,
+        // including structured JSON, as it correctly handles content parts.
+        const textContent = response.text;
 
-        return new Response(JSON.stringify({ text: response.text }), {
+        return new Response(JSON.stringify({ text: textContent }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
         });

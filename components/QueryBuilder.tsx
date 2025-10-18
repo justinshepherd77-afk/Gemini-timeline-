@@ -1,6 +1,6 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
-import { REGIONS_DATA, TOPICS } from '../constants';
-import { getCitiesForCountry } from '../services/geminiService';
+import { REGIONS_DATA, TOPICS, CITIES_DATA } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 
 interface QueryBuilderProps {
@@ -63,11 +63,10 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = (props) => {
   } = props;
 
   const [showYearTooltip, setShowYearTooltip] = useState(false);
-  const [cities, setCities] = useState<string[]>(['Houston']);
-  const [isFetchingCities, setIsFetchingCities] = useState<boolean>(false);
   const { user } = useAuth();
 
   const countries = useMemo(() => REGIONS_DATA[region] || [], [region]);
+  const cities = useMemo(() => CITIES_DATA[country] || CITIES_DATA['Default'] || [], [country]);
   
   const yearRange = useMemo(() => {
     if (century > 0) {
@@ -86,27 +85,12 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = (props) => {
   }, [countries, country, setCountry]);
 
   useEffect(() => {
-    if (!country) return;
-    const fetchCities = async () => {
-      setIsFetchingCities(true);
-      try {
-        const fetchedCities = await getCitiesForCountry(country);
-        setCities(fetchedCities);
-        if (fetchedCities.length > 0 && !fetchedCities.includes(city)) {
-          setCity(fetchedCities[0]);
-        } else if (fetchedCities.length === 0) {
-          setCity(""); 
-        }
-      } catch (error) {
-        console.error("Failed to fetch cities:", error);
-        setCities([]); 
-        setCity("");
-      } finally {
-        setIsFetchingCities(false);
-      }
-    };
-    fetchCities();
-  }, [country, setCity]);
+    if (cities.length > 0) {
+        setCity(cities[0]);
+    } else {
+        setCity('');
+    }
+  }, [country, setCity]); // city list is derived from country
   
   useEffect(() => {
      if (year < yearRange.min || year > yearRange.max) {
@@ -139,7 +123,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = (props) => {
       );
     }
 
-    const isSearchDisabled = isLoading || (searchMode === 'time' && isFetchingCities) || (searchMode === 'search' && !searchTerm.trim());
+    const isSearchDisabled = isLoading || (searchMode === 'search' && !searchTerm.trim());
     const costText = 'Free';
 
     return (
@@ -148,7 +132,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = (props) => {
         disabled={isSearchDisabled}
         className="w-full mt-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105"
       >
-        {isLoading ? 'Exploring...' : (searchMode === 'time' && isFetchingCities) ? 'Loading...' : `Uncover History (${costText})`}
+        {isLoading ? 'Exploring...' : `Uncover History (${costText})`}
       </button>
     )
   }
@@ -183,8 +167,8 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = (props) => {
                 </select>
               </InputGroup>
               <InputGroup label="City / Location">
-                <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-50" disabled={isFetchingCities || cities.length === 0}>
-                  {isFetchingCities ? <option>Loading cities...</option> : cities.length > 0 ? cities.map(c => <option key={c} value={c}>{c}</option>) : <option>Select a country first</option>}
+                <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-50" disabled={cities.length === 0}>
+                  {cities.length > 0 ? cities.map(c => <option key={c} value={c}>{c}</option>) : <option>No cities available</option>}
                 </select>
               </InputGroup>
               <InputGroup label="Topic">
