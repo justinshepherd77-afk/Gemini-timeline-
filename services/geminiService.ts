@@ -1,11 +1,26 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+
 import type { Query, SummaryResult, TimelineEvent, PersonSummary, PersonInDepth, FamilyTreeNode, EventInDepth, HistoricalEchoLink } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
+// This helper function centralizes all calls to our secure Netlify function,
+// which acts as a proxy to the Gemini API.
+async function callNetlifyFunction(task: string, payload: any) {
+  const response = await fetch('/.netlify/functions/gemini', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ task, payload }),
+  });
+
+  if (!response.ok) {
+    // Try to parse the error message from the server, with a fallback.
+    const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from server.' }));
+    throw new Error(errorData.error || `Server responded with status ${response.status}`);
+  }
+
+  return response.json();
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export async function getCitiesForCountry(country: string): Promise<string[]> {
   const prompt = `Provide a JSON array of 20 major cities for the country: ${country}. Just the array.`;
@@ -15,12 +30,8 @@ export async function getCitiesForCountry(country: string): Promise<string[]> {
   };
 
   try {
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim()).sort();
+    const data = await callNetlifyFunction('getCitiesForCountry', { prompt, config });
+    return JSON.parse(data.text.trim()).sort();
   } catch (e) {
     console.error(`Failed to fetch cities for ${country}:`, e);
     return ["Capital City"];
@@ -32,15 +43,9 @@ export async function generateImage(query: Query | { searchTerm: string }): Prom
     ? `You are an AI artist creating a historical image based on this user request: Topic is "${query.topic}" in ${query.city}, ${query.country} during the year ${query.year}. First, silently determine if the city "${query.city}" was an established settlement in that year. - If it was, generate an artistic, photorealistic image representing the topic in that city and era. The style should be reminiscent of photography from that time. Dramatic lighting, detailed. - If the city did not exist, generate an artistic, historically respectful image representing a key scene from the creation myth of the major indigenous people who inhabited the geographical area of modern-day ${query.city}. State the name of the tribe in your internal reasoning. The style should be like a detailed, respectful historical or mythological painting. Based on your choice, your prompt for the image generator is:`
     : `An artistic, photorealistic portrait of ${query.searchTerm}. The style should be appropriate to their historical era. Detailed, high quality.`;
   
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: { parts: [{ text: prompt }] },
-    config: { responseModalities: [Modality.IMAGE] },
-  });
-  
-  const imageData = response.candidates[0].content.parts.find(p => p.inlineData)?.inlineData?.data;
-  if (!imageData) throw new Error("No image data found");
-  return imageData;
+  const data = await callNetlifyFunction('generateImage', { prompt });
+  if (!data.imageData) throw new Error("No image data found");
+  return data.imageData;
 }
 
 export async function getSummaries(query: Query): Promise<SummaryResult> {
@@ -50,12 +55,8 @@ export async function getSummaries(query: Query): Promise<SummaryResult> {
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { primary: { type: "STRING" }, related: { type: "STRING" } }, required: ["primary", "related"] },
   };
-  const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config,
-  });
-  return JSON.parse(response.text.trim());
+  const data = await callNetlifyFunction('getSummaries', { prompt, config });
+  return JSON.parse(data.text.trim());
 }
 
 export async function getInDepthReport(query: Query): Promise<EventInDepth> {
@@ -65,12 +66,8 @@ export async function getInDepthReport(query: Query): Promise<EventInDepth> {
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { keyFigures: { type: "STRING" }, socioPoliticalContext: { type: "STRING" }, opposingViews: { type: "STRING" }, immediateConsequences: { type: "STRING" } }, required: ["keyFigures", "socioPoliticalContext", "opposingViews", "immediateConsequences"] },
   };
-  const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config,
-  });
-  return JSON.parse(response.text.trim());
+  const data = await callNetlifyFunction('getInDepthReport', { prompt, config });
+  return JSON.parse(data.text.trim());
 }
 
 export async function getTimeline(query: Query): Promise<TimelineEvent[]> {
@@ -80,31 +77,21 @@ export async function getTimeline(query: Query): Promise<TimelineEvent[]> {
         responseMimeType: "application/json",
         responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { year: { type: "STRING" }, event: { type: "STRING" }, type: { type: "STRING", enum: ["preceding", "main", "succeeding"] }, interestingDetail: { type: "STRING" } }, required: ["year", "event", "type"] } },
     };
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim());
+    const data = await callNetlifyFunction('getTimeline', { prompt, config });
+    return JSON.parse(data.text.trim());
 }
 
 export async function classifySearchTerm(term: string): Promise<'person' | 'topic'> {
     const prompt = `Is the following search term more likely a specific person's name or a general topic/event? Respond with only the word "person" or "topic". Term: "${term}"`;
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
-    const result = response.text.trim().toLowerCase();
+    const data = await callNetlifyFunction('classifySearchTerm', { prompt });
+    const result = data.text.trim().toLowerCase();
     return result === 'person' ? 'person' : 'topic';
 }
 
 export async function getTopicSummary(term: string): Promise<string> {
     const prompt = `Provide a concise, one-paragraph summary of the historical topic: "${term}". This should serve as an outline for a book report.`;
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
-    return response.text;
+    const data = await callNetlifyFunction('getTopicSummary', { prompt });
+    return data.text;
 }
 
 export async function getPersonSummary(term: string): Promise<PersonSummary> {
@@ -113,12 +100,8 @@ export async function getPersonSummary(term: string): Promise<PersonSummary> {
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { overview: { type: "STRING" }, family: { type: "STRING" }, keyEvents: { type: "STRING" } }, required: ["overview", "family", "keyEvents"] },
     };
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim());
+    const data = await callNetlifyFunction('getPersonSummary', { prompt, config });
+    return JSON.parse(data.text.trim());
 }
 
 export async function getPersonInDepth(term: string): Promise<PersonInDepth> {
@@ -127,12 +110,8 @@ export async function getPersonInDepth(term: string): Promise<PersonInDepth> {
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { friendsAndAssociates: { type: "STRING" }, influencesAndMentors: { type: "STRING" }, achievements: { type: "STRING" }, funnyAnecdotes: { type: "STRING" }, embarrassingStories: { type: "STRING" }, conspiracyTheories: { type: "STRING" }, enemies: { type: "STRING" }, notableQuotes: { type: "STRING" }, contextualAnalysis: { type: "STRING" } }, required: ["friendsAndAssociates", "influencesAndMentors", "achievements", "funnyAnecdotes", "embarrassingStories", "conspiracyTheories", "enemies", "notableQuotes", "contextualAnalysis"] },
     };
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim());
+    const data = await callNetlifyFunction('getPersonInDepth', { prompt, config });
+    return JSON.parse(data.text.trim());
 }
 
 export async function getSixDegreesOfSeparation(term: string): Promise<HistoricalEchoLink[]> {
@@ -141,12 +120,8 @@ export async function getSixDegreesOfSeparation(term: string): Promise<Historica
         responseMimeType: "application/json",
         responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { year: { type: "STRING" }, title: { type: "STRING" }, consequence: { type: "STRING" } }, required: ["year", "title", "consequence"] } },
     };
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim());
+    const data = await callNetlifyFunction('getSixDegreesOfSeparation', { prompt, config });
+    return JSON.parse(data.text.trim());
 }
 
 export async function getFamilyTree(term: string): Promise<FamilyTreeNode> {
@@ -154,10 +129,6 @@ export async function getFamilyTree(term: string): Promise<FamilyTreeNode> {
     familyTreeNodeSchema.properties.children.items = familyTreeNodeSchema; // Self-referential schema
     const prompt = `Generate a family tree for "${term}". The structure must be a nested JSON object. The root object represents "${term}" and should have the relation "Self". Each object must have "name", "relation", and an optional "children" array of similar objects. CRITICAL: To prevent a stack overflow error, the nesting depth of the tree MUST be strictly limited. Include only immediate parents, spouse(s), and children. You may include grandparents and grandchildren, but go no further than one generation up from parents and one generation down from children.`;
     const config = { responseMimeType: "application/json", responseSchema: familyTreeNodeSchema };
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config,
-    });
-    return JSON.parse(response.text.trim());
+    const data = await callNetlifyFunction('getFamilyTree', { prompt, config });
+    return JSON.parse(data.text.trim());
 }
