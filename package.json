@@ -1,0 +1,23 @@
+{
+  "name": "chronolink",
+  "version": "1.0.0",
+  "description": "An application that allows users to generate historical summaries for specific times and places using Gemini.",
+  "main": "index.js",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.25.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.12",
+    "@vitejs/plugin-react": "^4.3.0"
+  }
+}

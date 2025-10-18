@@ -1,0 +1,5 @@
+{
+  "name": "Chronolink",
+  "description": "An application that allows users to generate historical summaries for specific times and places using Gemini. Users can delve deeper with detailed reports and explore historical timelines.",
+  "requestFramePermissions": []
+}
