@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { Context } from "@netlify/functions";
 
@@ -90,12 +89,28 @@ export default async (req: Request, context: Context) => {
     }
   } catch (error) {
     console.error('Error in Gemini function:', error);
+    
+    let errorMessage = 'An internal server error occurred.';
+    let statusCode = 500;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Provide more specific feedback for common issues
+      if (errorMessage.includes('API key not valid')) {
+        statusCode = 401; // Unauthorized
+        errorMessage = 'Authentication Error: The API key is not valid. Please verify the API_KEY in your server environment variables.';
+      } else if (errorMessage.toLowerCase().includes('timed out') || errorMessage.toLowerCase().includes('deadline exceeded')) {
+        statusCode = 504; // Gateway Timeout
+        errorMessage = 'The request to the AI service timed out. The query may be too complex or the service is under high load. Please try again with a simpler query.';
+      }
+    }
+
     return new Response(
-        JSON.stringify({ error: error instanceof Error ? error.message : 'An internal server error occurred.' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
+      JSON.stringify({ error: errorMessage }),
+      {
+        status: statusCode,
+        headers: { 'Content-Type': 'application/json' },
+      }
     );
   }
 };
