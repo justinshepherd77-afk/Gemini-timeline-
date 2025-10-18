@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { Handler } from "@netlify/functions";
+import type { Context } from "@netlify/functions";
 
 // This is the single, secure entry point for all Gemini API calls.
 // The API key is stored securely in Netlify's environment variables.
@@ -10,13 +10,13 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+export default async (req: Request, context: Context) => {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const { task, payload } = JSON.parse(event.body || '{}');
+    const { task, payload } = await req.json();
     let response;
     
     // The model is chosen based on the task for performance and cost.
@@ -46,7 +46,10 @@ const handler: Handler = async (event) => {
 
         const imageData = imageCandidate.content.parts.find(p => p.inlineData)?.inlineData?.data;
         if (!imageData) throw new Error("No image data found in the response.");
-        return { statusCode: 200, body: JSON.stringify({ imageData }) };
+        return new Response(JSON.stringify({ imageData }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
       
       // All other tasks are handled here. They share a similar structure.
       default:
@@ -72,15 +75,19 @@ const handler: Handler = async (event) => {
           throw new Error("The API returned a response, but it contained no content.");
         }
 
-        return { statusCode: 200, body: JSON.stringify({ text: response.text }) };
+        return new Response(JSON.stringify({ text: response.text }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
   } catch (error) {
     console.error('Error in Gemini function:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error instanceof Error ? error.message : 'An internal server error occurred.' }),
-    };
+    return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : 'An internal server error occurred.' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+    );
   }
 };
-
-export { handler };
