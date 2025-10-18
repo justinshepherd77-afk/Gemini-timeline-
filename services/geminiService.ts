@@ -125,8 +125,33 @@ export async function getSixDegreesOfSeparation(term: string): Promise<Historica
 }
 
 export async function getFamilyTree(term: string): Promise<FamilyTreeNode> {
-    const familyTreeNodeSchema: any = { type: "OBJECT", properties: { name: { type: "STRING" }, relation: { type: "STRING" }, children: { type: "ARRAY", items: {} } }, required: ['name', 'relation'] };
-    familyTreeNodeSchema.properties.children.items = familyTreeNodeSchema; // Self-referential schema
+    // Defines a schema for a tree up to 2 levels deep to avoid circular dependencies.
+    const leafNodeSchema = {
+        type: "OBJECT",
+        properties: { name: { type: "STRING" }, relation: { type: "STRING" } },
+        required: ['name', 'relation']
+    };
+
+    const parentNodeSchema = {
+        type: "OBJECT",
+        properties: {
+            name: { type: "STRING" },
+            relation: { type: "STRING" },
+            children: { type: "ARRAY", items: leafNodeSchema }
+        },
+        required: ['name', 'relation']
+    };
+    
+    const familyTreeNodeSchema = {
+        type: "OBJECT",
+        properties: {
+            name: { type: "STRING" },
+            relation: { type: "STRING" },
+            children: { type: "ARRAY", items: parentNodeSchema }
+        },
+        required: ['name', 'relation']
+    };
+    
     const prompt = `Generate a family tree for "${term}". The structure must be a nested JSON object. The root object represents "${term}" and should have the relation "Self". Each object must have "name", "relation", and an optional "children" array of similar objects. CRITICAL: To prevent a stack overflow error, the nesting depth of the tree MUST be strictly limited. Include only immediate parents, spouse(s), and children. You may include grandparents and grandchildren, but go no further than one generation up from parents and one generation down from children.`;
     const config = { responseMimeType: "application/json", responseSchema: familyTreeNodeSchema };
     const data = await callNetlifyFunction('getFamilyTree', { prompt, config });

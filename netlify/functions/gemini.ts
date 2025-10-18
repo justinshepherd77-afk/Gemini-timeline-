@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+
+import { GoogleGenAI, Modality } from "@google/genai";
 import type { Handler } from "@netlify/functions";
 
 // This is the single, secure entry point for all Gemini API calls.
@@ -30,9 +31,16 @@ const handler: Handler = async (event) => {
           contents: { parts: [{ text: payload.prompt }] },
           config: { responseModalities: [Modality.IMAGE] },
         });
+
+        if (!response.candidates || response.candidates.length === 0) {
+            const feedback = response.promptFeedback;
+            const blockReason = feedback?.blockReason;
+            throw new Error(`Image generation failed. The request may have been blocked. Reason: ${blockReason || 'Unknown'}`);
+        }
+
         // The image data is large, so we extract only what's needed.
         const imageData = response.candidates[0].content.parts.find(p => p.inlineData)?.inlineData?.data;
-        if (!imageData) throw new Error("No image data found");
+        if (!imageData) throw new Error("No image data found in the response.");
         return { statusCode: 200, body: JSON.stringify({ imageData }) };
       
       // All other tasks are handled here. They share a similar structure.
@@ -42,6 +50,17 @@ const handler: Handler = async (event) => {
             contents: payload.prompt,
             config: payload.config,
         });
+
+        if (!response.candidates || response.candidates.length === 0) {
+            const feedback = response.promptFeedback;
+            const blockReason = feedback?.blockReason;
+            const safetyRatings = feedback?.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ');
+            let errorMessage = "No content generated. The request may have been blocked.";
+            if (blockReason) errorMessage += ` Reason: ${blockReason}.`;
+            if (safetyRatings) errorMessage += ` Safety Ratings: [${safetyRatings}].`;
+            throw new Error(errorMessage);
+        }
+
         return { statusCode: 200, body: JSON.stringify({ text: response.text }) };
     }
   } catch (error) {
