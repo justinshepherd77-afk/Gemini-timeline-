@@ -38,8 +38,13 @@ const handler: Handler = async (event) => {
             throw new Error(`Image generation failed. The request may have been blocked. Reason: ${blockReason || 'Unknown'}`);
         }
 
-        // The image data is large, so we extract only what's needed.
-        const imageData = response.candidates[0].content.parts.find(p => p.inlineData)?.inlineData?.data;
+        // Add more robust check for empty content to prevent crashes.
+        const imageCandidate = response.candidates[0];
+        if (!imageCandidate.content || !imageCandidate.content.parts || imageCandidate.content.parts.length === 0) {
+          throw new Error("The API returned an image response, but it contained no content parts.");
+        }
+
+        const imageData = imageCandidate.content.parts.find(p => p.inlineData)?.inlineData?.data;
         if (!imageData) throw new Error("No image data found in the response.");
         return { statusCode: 200, body: JSON.stringify({ imageData }) };
       
@@ -59,6 +64,12 @@ const handler: Handler = async (event) => {
             if (blockReason) errorMessage += ` Reason: ${blockReason}.`;
             if (safetyRatings) errorMessage += ` Safety Ratings: [${safetyRatings}].`;
             throw new Error(errorMessage);
+        }
+
+        // Add more robust check for empty content to prevent crashes.
+        const candidate = response.candidates[0];
+        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+          throw new Error("The API returned a response, but it contained no content.");
         }
 
         return { statusCode: 200, body: JSON.stringify({ text: response.text }) };
