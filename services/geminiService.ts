@@ -13,9 +13,12 @@ async function callNetlifyFunction(task: string, payload: any) {
   });
 
   if (!response.ok) {
-    // Try to parse the error message from the server, with a fallback.
-    const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from server.' }));
-    throw new Error(errorData.error || `Server responded with status ${response.status}`);
+    // Try to parse the new structured error message from the server.
+    const errorData = await response.json().catch(() => ({ 
+      error: { message: 'Failed to parse error response from server.' }
+    }));
+    // Throw the user-facing message, which is now part of the structured error.
+    throw new Error(errorData.error?.message || `Server responded with status ${response.status}`);
   }
 
   return response.json();
