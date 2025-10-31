@@ -79,7 +79,7 @@ export default async (req: Request, context: Context) => {
         console.log('[Text Gen] Calling Gemini for text generation.');
         response = await ai.models.generateContent({
             model: model,
-            contents: [{ parts: [{ text: payload.prompt }] }],
+            contents: payload.prompt,
             config: payload.config,
         });
 
