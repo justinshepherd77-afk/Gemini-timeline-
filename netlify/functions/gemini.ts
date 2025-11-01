@@ -27,7 +27,7 @@ export default async (req: Request, context: Context) => {
     return createErrorResponse('Server configuration error: API_KEY is not set.', 500);
   }
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_KEY || process.env.API_KEY });
 
   try {
     const { task, payload } = await req.json();
